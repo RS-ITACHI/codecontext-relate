@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeContext Graph — Relate by Neo4j</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#131a2e; --border:#253152; --text:#e6ecff; --muted:#95a3c8; --accent:#38bdf8; --ok:#34d399; --warn:#fbbf24; --danger:#f87171; }
+    * { box-sizing: border-box; font-family: Inter, system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+    .pill { background: #19223c; border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+    input, textarea { width: 100%; background: #0d1324; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+    button { background: var(--accent); color: #05111f; border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    button.ghost { background: #1c2642; color: var(--text); border: 1px solid var(--border); margin-right: 6px; font-weight: 500; }
+    pre { background: #090d1a; border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow: auto; font-size: 12px; max-height: 280px; }
+    .answer { background: #0f1d2e; border-left: 3px solid var(--ok); padding: 10px 12px; border-radius: 6px; margin-top: 10px; font-size: 14px; }
+    svg { width: 100%; height: 340px; background: #090d1a; border-radius: 8px; border: 1px solid var(--border); }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>CodeContext Graph <span style="color:var(--accent);font-size:15px;">powered by Relate (Neo4j)</span></h1>
+  <div class="sub">Embedded persistent property-graph memory for AI coding agents — zero server setup, multi-hop Cypher facts instead of guessing.</div>
+
+  <div class="stats" id="stats">Loading Relate store stats...</div>
+
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin-top:0">Ask Agent Memory (Multi-Hop Context)</h3>
+      <input id="question" value="What is the blast radius if I change verify_idempotency_key?" />
+      <div style="margin-top:6px">
+        <button onclick="ask()">Ask Relate</button>
+        <button class="ghost" onclick="preset('What is the blast radius if I change verify_idempotency_key?')">Blast Radius</button>
+        <button class="ghost" onclick="preset('Why does verify_idempotency_key exist?')">Why ADR?</button>
+        <button class="ghost" onclick="preset('Show all incident root causes')">Incidents</button>
+      </div>
+      <div id="answer" class="answer" style="display:none"></div>
+      <pre id="askJson"></pre>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Cypher Playground (Embedded Relate)</h3>
+      <textarea id="cypher" rows="3">MATCH (i:Incident)-[:CAUSED_BY]->(s:Symbol)<-[:GOVERNS]-(d:Decision) RETURN i.id, i.severity, s.name, d.id, d.title</textarea>
+      <button onclick="runCypher()">Run Cypher</button>
+      <pre id="cypherOut"></pre>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1;">
+      <h3 style="margin-top:0">Connected Context Graph</h3>
+      <svg id="graph"></svg>
+    </div>
+  </div>
+
+  <script>
+    const COLORS = { File:'#38bdf8', Symbol:'#34d399', Decision:'#a78bfa', Incident:'#f87171', Rule:'#fbbf24' };
+
+    async function loadStats() {
+      const s = await (await fetch('/api/stats')).json();
+      const el = document.getElementById('stats');
+      const parts = [`<span class="pill"><b>Total Nodes:</b> ${s.total_nodes}</span>`, `<span class="pill"><b>Relationships:</b> ${s.total_relationships}</span>`];
+      for (const [k, v] of Object.entries(s.nodes || {})) parts.push(`<span class="pill">${k}: <b>${v}</b></span>`);
+      el.innerHTML = parts.join('');
+    }
+
+    function preset(q) { document.getElementById('question').value = q; ask(); }
+
+    async function ask() {
+      const question = document.getElementById('question').value;
+      const res = await (await fetch('/api/ask', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({question}) })).json();
+      const ans = document.getElementById('answer');
+      ans.style.display = 'block';
+      ans.textContent = res.answer;
+      document.getElementById('askJson').textContent = JSON.stringify(res.data, null, 2);
+    }
+
+    async function runCypher() {
+      const cypher = document.getElementById('cypher').value;
+      const res = await (await fetch('/api/cypher', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cypher}) })).json();
+      document.getElementById('cypherOut').textContent = JSON.stringify(res, null, 2);
+    }
+
+    async function drawGraph() {
+      const data = await (await fetch('/api/graph')).json();
+      const svg = document.getElementById('graph');
+      const W = svg.clientWidth || 900, H = 340;
+      const pos = {};
+      data.nodes.forEach((n, idx) => {
+        const angle = (idx / Math.max(1, data.nodes.length)) * Math.PI * 2;
+        const r = 110 + (idx % 3) * 35;
+        pos[n.id] = { x: W/2 + Math.cos(angle) * r * 1.9, y: H/2 + Math.sin(angle) * r * 0.75, n };
+      });
+      let html = '';
+      for (const e of data.edges) {
+        const a = pos[e.source], b = pos[e.target];
+        if (!a || !b) continue;
+        html += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#334166" stroke-width="1.3"/>`;
+      }
+      for (const p of Object.values(pos)) {
+        const c = COLORS[p.n.label] || '#cbd5e1';
+        const name = p.n.props.name || p.n.props.id || p.n.props.path || p.n.label;
+        html += `<circle cx="${p.x}" cy="${p.y}" r="8" fill="${c}"/><text x="${p.x+10}" y="${p.y+4}" fill="#cbd5e1" font-size="11">${String(name).slice(0,22)}</text>`;
+      }
+      svg.innerHTML = html;
+    }
+
+    loadStats(); drawGraph(); ask(); runCypher();
+  </script>
+</body>
+</html>

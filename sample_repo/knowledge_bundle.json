@@ -1,0 +1,64 @@
+{
+  "decisions": [
+    {
+      "id": "ADR-001",
+      "title": "Mandatory Idempotency Keys on Checkout",
+      "rationale": "Gateway retries caused duplicate charges during network timeouts; every checkout must call verify_idempotency_key.",
+      "status": "accepted",
+      "date": "2026-10-12",
+      "targets": ["verify_idempotency_key", "process_checkout"]
+    },
+    {
+      "id": "ADR-002",
+      "title": "Integer-Cents Only for Settlement Math",
+      "rationale": "Floating-point rounding drifted by 1 cent on high-volume payouts; all fee math must stay in integer cents.",
+      "status": "accepted",
+      "date": "2026-10-20",
+      "targets": ["calculate_settlement_fee"]
+    },
+    {
+      "id": "ADR-003",
+      "title": "Constant-Time Webhook HMAC Verification",
+      "rationale": "Prevents timing side-channel attacks on webhook endpoints.",
+      "status": "accepted",
+      "date": "2026-11-01",
+      "targets": ["verify_webhook_signature", "handle_payment_webhook"]
+    }
+  ],
+  "incidents": [
+    {
+      "id": "INC-204",
+      "title": "Double-Charge During Payment Gateway Retry Storm",
+      "severity": "SEV-1",
+      "root_cause": "process_checkout lacked idempotency key deduplication on 504 retries.",
+      "fix": "Added verify_idempotency_key check before settlement.",
+      "affected_symbols": ["process_checkout", "verify_idempotency_key"],
+      "fixed_by_decision": "ADR-001"
+    },
+    {
+      "id": "INC-219",
+      "title": "Ledger Penny Drift on Batch Payouts",
+      "severity": "SEV-2",
+      "root_cause": "Float multiplication in fee calculation caused 1-cent reconciliation mismatches.",
+      "fix": "Switched calculate_settlement_fee to integer-cent arithmetic.",
+      "affected_symbols": ["calculate_settlement_fee"],
+      "fixed_by_decision": "ADR-002"
+    }
+  ],
+  "rules": [
+    {
+      "id": "RULE-01",
+      "title": "Never bypass idempotency check",
+      "constraint": "All payment entrypoints MUST call verify_idempotency_key before charging.",
+      "level": "MUST",
+      "applies_to": ["verify_idempotency_key", "process_checkout", "handle_payment_webhook"]
+    },
+    {
+      "id": "RULE-02",
+      "title": "No float currency math",
+      "constraint": "Monetary amounts MUST remain integer cents.",
+      "level": "MUST",
+      "applies_to": ["calculate_settlement_fee"]
+    }
+  ]
+}
