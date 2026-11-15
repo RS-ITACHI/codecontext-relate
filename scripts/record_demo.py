@@ -52,32 +52,36 @@ def main() -> None:
             )
             page = context.new_page()
             page.goto("http://127.0.0.1:8765/", wait_until="networkidle")
+            say = lambda txt: page.evaluate(
+                "(t) => { const el = document.getElementById('narration'); el.style.display='block'; el.textContent=t; }",
+                txt,
+            )
+
+            say("1/5 Embedded Relate persistent store loaded (zero external DB server).")
             page.wait_for_timeout(3500)
 
-            # 1. Blast Radius demo
+            say("2/5 Multi-hop Blast Radius: tracing 1..3-hop callers, ADRs, Rules & Incidents.")
             page.get_by_role("button", name="Blast Radius").click()
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(3500)
 
-            # 2. Why ADR demo
+            say("3/5 Tracing Why ADR?: connecting code symbols back to INC-204 & ADR-001.")
             page.get_by_role("button", name="Why ADR?").click()
+            page.wait_for_timeout(3500)
+
+            say("4/5 Agentic PR Guardrail: Relate blocks risky changes before they ship.")
+            page.get_by_role("button", name="Run Agentic Guardrail").click()
             page.wait_for_timeout(4000)
 
-            # 3. Incidents demo
-            page.get_by_role("button", name="Incidents").click()
-            page.wait_for_timeout(4000)
-
-            # 4. Live Cypher query
+            say("5/5 Live Cypher Playground + Interactive Connected Context Graph.")
             cypher_box = page.locator("#cypher")
             cypher_box.fill(
                 "MATCH (r:Rule)-[:APPLIES_TO]->(s:Symbol)<-[:CALLS]-(caller:Symbol) "
                 "RETURN r.id, r.constraint, s.name, caller.name"
             )
-            page.wait_for_timeout(1200)
             page.get_by_role("button", name="Run Cypher").click()
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(2500)
 
-            # 5. Scroll down to showcase the connected graph
-            page.evaluate("window.scrollTo({top: 320, behavior: 'smooth'})")
+            page.evaluate("window.scrollTo({top: 480, behavior: 'smooth'})")
             page.wait_for_timeout(4500)
 
             video_path = page.video.path()

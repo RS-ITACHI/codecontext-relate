@@ -18,6 +18,7 @@ from codecontext.agent_tools import (
     why_exists,
 )
 from codecontext.graph_store import CodeContextStore
+from codecontext.ingestor import ingest_python_repo
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -48,6 +49,10 @@ class MemoryRequest(BaseModel):
 class ReviewRequest(BaseModel):
     symbol: str
     proposed_change: str
+
+
+class IngestRequest(BaseModel):
+    repo_path: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -116,3 +121,13 @@ def api_memory(req: MemoryRequest) -> dict:
 def api_review_change(req: ReviewRequest) -> dict:
     with get_store() as store:
         return review_code_change(store, req.symbol, req.proposed_change)
+
+
+@app.post("/api/ingest")
+def api_ingest(req: IngestRequest) -> dict:
+    target = Path(req.repo_path).resolve()
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=400, detail=f"Directory not found: {target}")
+    with get_store() as store:
+        res = ingest_python_repo(store, target)
+        return {"ingested": res, "stats": store.stats()}
