@@ -68,11 +68,16 @@ def main() -> None:
             page.get_by_role("button", name="Why ADR?").click()
             page.wait_for_timeout(3500)
 
-            say("4/5 Agentic PR Guardrail: Relate blocks risky changes before they ship.")
+            say("4/6 Agentic PR Guardrail: Relate blocks risky changes before they ship.")
             page.get_by_role("button", name="Run Agentic Guardrail").click()
+            page.wait_for_timeout(3500)
+
+            say("5/6 Unified Git PR Diff Analyzer: multi-symbol Blast Radius, Risk Score & PR comment.")
+            page.get_by_role("button", name="Analyze PR Diff").click()
+            page.evaluate("window.scrollTo({top: 520, behavior: 'smooth'})")
             page.wait_for_timeout(4000)
 
-            say("5/5 Live Cypher Playground + Interactive Connected Context Graph.")
+            say("6/6 Live Cypher Playground + Interactive Connected Context Graph.")
             cypher_box = page.locator("#cypher")
             cypher_box.fill(
                 "MATCH (r:Rule)-[:APPLIES_TO]->(s:Symbol)<-[:CALLS]-(caller:Symbol) "
@@ -81,8 +86,8 @@ def main() -> None:
             page.get_by_role("button", name="Run Cypher").click()
             page.wait_for_timeout(2500)
 
-            page.evaluate("window.scrollTo({top: 480, behavior: 'smooth'})")
-            page.wait_for_timeout(4500)
+            page.evaluate("window.scrollTo({top: 900, behavior: 'smooth'})")
+            page.wait_for_timeout(4000)
 
             video_path = page.video.path()
             context.close()
