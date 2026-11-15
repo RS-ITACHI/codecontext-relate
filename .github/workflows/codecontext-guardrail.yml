@@ -1,0 +1,44 @@
+name: CodeContext Relate PR Guardrail
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  guardrail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run CodeContext Relate PR Diff Guardrail
+        env:
+          PYTHONPATH: src
+        run: |
+          python -c "
+          import subprocess
+          from pathlib import Path
+          from codecontext.graph_store import CodeContextStore
+          from codecontext.ingestor import ingest_python_repo, ingest_knowledge_bundle
+          from codecontext.agent_loop import review_pr_diff
+
+          diff = subprocess.check_output(['git', 'diff', 'HEAD~1'], text=True)
+          with CodeContextStore(':memory:') as store:
+              ingest_python_repo(store, Path('sample_repo'))
+              ingest_knowledge_bundle(store, Path('sample_repo/knowledge_bundle.json'))
+              ingest_python_repo(store, Path('src/codecontext'))
+              res = review_pr_diff(store, diff)
+              print(res['markdown_comment'])
+              if res['verdict'] == 'BLOCKED':
+                  raise SystemExit(1)
+          "
