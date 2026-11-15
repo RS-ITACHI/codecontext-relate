@@ -51,6 +51,17 @@
     </div>
 
     <div class="card" style="grid-column: 1 / -1;">
+      <h3 style="margin-top:0">Agentic PR Guardrail Reviewer (Blocks Regressions Using Relate)</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <input id="revSymbol" style="flex:1;min-width:200px" value="verify_idempotency_key" placeholder="Target symbol" />
+        <input id="revChange" style="flex:2;min-width:300px" value="Remove idempotency key check to speed up checkout retries" placeholder="Proposed change description" />
+      </div>
+      <button onclick="reviewChange()">Run Agentic Guardrail</button>
+      <div id="revVerdict" class="answer" style="display:none"></div>
+      <pre id="revJson"></pre>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1;">
       <h3 style="margin-top:0">Connected Context Graph</h3>
       <svg id="graph"></svg>
     </div>
@@ -108,7 +119,18 @@
       svg.innerHTML = html;
     }
 
-    loadStats(); drawGraph(); ask(); runCypher();
+    async function reviewChange() {
+      const symbol = document.getElementById('revSymbol').value;
+      const proposed_change = document.getElementById('revChange').value;
+      const res = await (await fetch('/api/review-change', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({symbol, proposed_change}) })).json();
+      const el = document.getElementById('revVerdict');
+      el.style.display = 'block';
+      el.style.borderLeftColor = res.verdict === 'BLOCKED' ? 'var(--danger)' : (res.verdict === 'CAUTION' ? 'var(--warn)' : 'var(--ok)');
+      el.textContent = `${res.summary} ${res.violations.length ? ' | ' + res.violations.join(' ') : ''}`;
+      document.getElementById('revJson').textContent = JSON.stringify(res, null, 2);
+    }
+
+    loadStats(); drawGraph(); ask(); runCypher(); reviewChange();
   </script>
 </body>
 </html>

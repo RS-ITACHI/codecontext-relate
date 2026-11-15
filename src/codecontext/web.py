@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from codecontext.agent_loop import review_code_change
 from codecontext.agent_tools import (
     answer_with_context,
     blast_radius,
@@ -42,6 +43,11 @@ class MemoryRequest(BaseModel):
     title: str
     rationale: str
     targets: list[str] = []
+
+
+class ReviewRequest(BaseModel):
+    symbol: str
+    proposed_change: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -104,3 +110,9 @@ def api_incidents() -> dict:
 def api_memory(req: MemoryRequest) -> dict:
     with get_store() as store:
         return record_agent_memory(store, req.decision_id, req.title, req.rationale, req.targets)
+
+
+@app.post("/api/review-change")
+def api_review_change(req: ReviewRequest) -> dict:
+    with get_store() as store:
+        return review_code_change(store, req.symbol, req.proposed_change)

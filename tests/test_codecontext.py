@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from codecontext.agent_loop import review_code_change
 from codecontext.agent_tools import (
     answer_with_context,
     blast_radius,
@@ -77,3 +78,25 @@ def test_mcp_server_tools() -> None:
             },
         )
         assert "ADR-002" in call_resp["result"]["content"][0]["text"]
+
+
+def test_agentic_pr_guardrail_blocks_regression() -> None:
+    with CodeContextStore(":memory:") as store:
+        ingest_python_repo(store, ROOT / "sample_repo")
+        ingest_knowledge_bundle(store, ROOT / "sample_repo" / "knowledge_bundle.json")
+
+        blocked = review_code_change(
+            store,
+            "verify_idempotency_key",
+            "Bypass idempotency check during high traffic",
+        )
+        assert blocked["verdict"] == "BLOCKED"
+        assert any("RULE-01" in v for v in blocked["violations"])
+
+        safe = review_code_change(
+            store,
+            "calculate_settlement_fee",
+            "Add docstring clarifying integer cents",
+        )
+        assert safe["verdict"] == "CAUTION"
+        assert safe["violations"] == []
