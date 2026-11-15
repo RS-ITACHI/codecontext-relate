@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 from typing import Any
 
@@ -92,4 +93,78 @@ def review_code_change(
         "why_details": why["decisions"],
         "summary": llm_note or grounded_summary,
         "elapsed_ms": br["elapsed_ms"],
+    }
+
+
+def _extract_diff_targets(store: CodeContextStore, diff_text: str) -> tuple[list[str], list[str]]:
+    """Extract changed files and impacted graph symbols from a unified git diff."""
+    files = re.findall(r"^\+\+\+\s+b/(.+)$", diff_text, flags=re.MULTILINE)
+    known = [
+        r["name"]
+        for r in store.execute("MATCH (s:Symbol) RETURN s.name AS name")
+        if r.get("name")
+    ]
+    # Match either explicit `def <name>` in diff/hunk headers or direct references to known symbols
+    explicit_defs = set(re.findall(r"(?:@@[^@]*@@\s*def\s+|^[+-]\s*def\s+)([A-Za-z_]\w*)", diff_text, flags=re.MULTILINE))
+    impacted = [s for s in known if s in explicit_defs or re.search(rf"\b{re.escape(s)}\b", diff_text)]
+    if not impacted and explicit_defs:
+        impacted = sorted(explicit_defs)
+    return files, impacted
+
+
+def review_pr_diff(store: CodeContextStore, diff_text: str) -> dict[str, Any]:
+    """Analyze a unified git diff across all impacted symbols using Relate multi-hop context."""
+    files, impacted = _extract_diff_targets(store, diff_text)
+    if not impacted:
+        return {
+            "verdict": "APPROVED",
+            "risk_score": 5,
+            "files": files,
+            "impacted_symbols": [],
+            "reviews": [],
+            "markdown_comment": "### CodeContext Graph PR Guardrail: `APPROVED` (Risk 5/100)\nNo governed graph symbols were impacted by this diff.",
+        }
+
+    # Focus proposed_change on added/removed lines so unchanged context lines don't false-trigger
+    changed_lines = "\n".join(
+        line[1:]
+        for line in diff_text.splitlines()
+        if (line.startswith("+") or line.startswith("-"))
+        and not line.startswith("+++")
+        and not line.startswith("---")
+    )
+    reviews = [review_code_change(store, sym, changed_lines or diff_text) for sym in impacted]
+
+    verdicts = {r["verdict"] for r in reviews}
+    overall_verdict = "BLOCKED" if "BLOCKED" in verdicts else ("CAUTION" if "CAUTION" in verdicts else "APPROVED")
+
+    total_callers = sum(len(r["upstream_callers"]) for r in reviews)
+    total_incidents = sum(len(r["incidents"]) for r in reviews)
+    total_violations = sum(len(r["violations"]) for r in reviews)
+    risk_score = min(100, 10 + total_violations * 45 + total_incidents * 15 + total_callers * 8)
+
+    lines = [
+        f"### CodeContext Graph PR Guardrail: `{overall_verdict}` (Risk {risk_score}/100)",
+        f"- **Files:** {', '.join(files) if files else 'patch snippet'}",
+        f"- **Impacted Symbols:** {', '.join(f'`{s}`' for s in impacted)}",
+    ]
+    for r in reviews:
+        lines.append(f"\n#### `{r['symbol']}` -> **{r['verdict']}**")
+        if r["violations"]:
+            for v in r["violations"]:
+                lines.append(f"- **Violation:** {v}")
+        if r["upstream_callers"]:
+            lines.append(f"- **Upstream Callers:** {', '.join(r['upstream_callers'])}")
+        if r["decisions"]:
+            lines.append(f"- **Governing ADRs:** {', '.join(r['decisions'])}")
+        if r["incidents"]:
+            lines.append(f"- **Linked Incidents:** {', '.join(r['incidents'])}")
+
+    return {
+        "verdict": overall_verdict,
+        "risk_score": risk_score,
+        "files": files,
+        "impacted_symbols": impacted,
+        "reviews": reviews,
+        "markdown_comment": "\n".join(lines),
     }

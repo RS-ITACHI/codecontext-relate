@@ -28,7 +28,10 @@
   <div class="sub">Embedded persistent property-graph memory for AI coding agents — zero server setup, multi-hop Cypher facts instead of guessing.</div>
   <div id="narration" style="display:none;background:#162244;border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px;color:#e0f2fe;"></div>
 
-  <div class="stats" id="stats">Loading Relate store stats...</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <div class="stats" id="stats" style="margin-bottom:0">Loading Relate store stats...</div>
+    <button class="ghost" style="margin-top:0" onclick="ingestSelf()">Index Live Codebase (src/codecontext)</button>
+  </div>
 
   <div class="grid">
     <div class="card">
@@ -60,6 +63,26 @@
       <button onclick="reviewChange()">Run Agentic Guardrail</button>
       <div id="revVerdict" class="answer" style="display:none"></div>
       <pre id="revJson"></pre>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <h3 style="margin:0">Unified Git PR Diff Analyzer (Multi-Symbol Blast Radius + Risk Score)</h3>
+        <span class="pill" id="diffRisk">Risk: —</span>
+      </div>
+      <textarea id="diffText" rows="6" style="margin-top:10px;font-family:monospace;">--- a/sample_repo/payments.py
++++ b/sample_repo/payments.py
+@@ -12,6 +12,6 @@ def verify_idempotency_key(key: str):
+-    if not key:
+-        raise ValueError("Missing idempotency key")
++    # bypass idempotency check during peak traffic
++    return True
++    amount = float(cents) / 100.0  # calculate_settlement_fee</textarea>
+      <div>
+        <button onclick="reviewDiff()">Analyze PR Diff</button>
+        <button class="ghost" onclick="loadSafeDiff()">Load Safe Diff</button>
+      </div>
+      <pre id="diffOut"></pre>
     </div>
 
     <div class="card" style="grid-column: 1 / -1;">
@@ -151,7 +174,27 @@
       document.getElementById('revJson').textContent = JSON.stringify(res, null, 2);
     }
 
-    loadStats(); drawGraph(); ask(); runCypher(); reviewChange();
+    async function reviewDiff() {
+      const diff_text = document.getElementById('diffText').value;
+      const res = await (await fetch('/api/review-diff', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({diff_text}) })).json();
+      const riskEl = document.getElementById('diffRisk');
+      riskEl.innerHTML = `<b>${res.verdict}</b> • Risk ${res.risk_score}/100`;
+      riskEl.style.borderColor = res.verdict === 'BLOCKED' ? 'var(--danger)' : (res.verdict === 'CAUTION' ? 'var(--warn)' : 'var(--ok)');
+      document.getElementById('diffOut').textContent = res.markdown_comment;
+    }
+
+    function loadSafeDiff() {
+      document.getElementById('diffText').value = `--- a/sample_repo/payments.py\n+++ b/sample_repo/payments.py\n@@ -25,1 +25,2 @@ def calculate_settlement_fee(cents: int):\n+    """Returns integer cents fee."""`;
+      reviewDiff();
+    }
+
+    async function ingestSelf() {
+      await fetch('/api/ingest-self', { method:'POST' });
+      await loadStats();
+      await drawGraph();
+    }
+
+    loadStats(); drawGraph(); ask(); runCypher(); reviewChange(); reviewDiff();
   </script>
 </body>
 </html>

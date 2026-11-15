@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from codecontext.agent_loop import review_code_change
+from codecontext.agent_loop import review_code_change, review_pr_diff
 from codecontext.agent_tools import (
     answer_with_context,
     blast_radius,
@@ -53,6 +53,10 @@ class ReviewRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     repo_path: str
+
+
+class DiffReviewRequest(BaseModel):
+    diff_text: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -123,11 +127,25 @@ def api_review_change(req: ReviewRequest) -> dict:
         return review_code_change(store, req.symbol, req.proposed_change)
 
 
+@app.post("/api/review-diff")
+def api_review_diff(req: DiffReviewRequest) -> dict:
+    with get_store() as store:
+        return review_pr_diff(store, req.diff_text)
+
+
 @app.post("/api/ingest")
 def api_ingest(req: IngestRequest) -> dict:
     target = Path(req.repo_path).resolve()
     if not target.exists() or not target.is_dir():
         raise HTTPException(status_code=400, detail=f"Directory not found: {target}")
+    with get_store() as store:
+        res = ingest_python_repo(store, target)
+        return {"ingested": res, "stats": store.stats()}
+
+
+@app.post("/api/ingest-self")
+def api_ingest_self() -> dict:
+    target = Path(__file__).resolve().parent
     with get_store() as store:
         res = ingest_python_repo(store, target)
         return {"ingested": res, "stats": store.stats()}

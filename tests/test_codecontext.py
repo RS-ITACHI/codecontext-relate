@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from codecontext.agent_loop import review_code_change
+from codecontext.agent_loop import review_code_change, review_pr_diff
 from codecontext.agent_tools import (
     answer_with_context,
     blast_radius,
@@ -100,3 +100,27 @@ def test_agentic_pr_guardrail_blocks_regression() -> None:
         )
         assert safe["verdict"] == "CAUTION"
         assert safe["violations"] == []
+
+
+def test_pr_diff_guardrail_and_self_ingest() -> None:
+    with CodeContextStore(":memory:") as store:
+        ingest_python_repo(store, ROOT / "sample_repo")
+        ingest_knowledge_bundle(store, ROOT / "sample_repo" / "knowledge_bundle.json")
+
+        diff_text = (
+            "--- a/sample_repo/payments.py\n"
+            "+++ b/sample_repo/payments.py\n"
+            "@@ -12,4 +12,4 @@ def verify_idempotency_key(key: str):\n"
+            "-    if not key:\n"
+            "+    # bypass idempotency check\n"
+            "+    return True\n"
+        )
+        res = review_pr_diff(store, diff_text)
+        assert res["verdict"] == "BLOCKED"
+        assert res["risk_score"] >= 70
+        assert "verify_idempotency_key" in res["impacted_symbols"]
+        assert "RULE-01" in res["markdown_comment"]
+
+        self_res = ingest_python_repo(store, ROOT / "src" / "codecontext")
+        assert self_res["files"] >= 5
+        assert self_res["symbols"] >= 15
