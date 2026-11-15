@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import statistics
+import sys
 import tempfile
 import time
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
 
 from codecontext.agent_loop import review_pr_diff
 from codecontext.agent_tools import blast_radius, why_exists
 from codecontext.graph_store import CodeContextStore
 from codecontext.ingestor import ingest_knowledge_bundle, ingest_python_repo
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> None:
